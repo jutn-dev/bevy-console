@@ -7,6 +7,7 @@ use bevy_egui::{EguiContextPass, EguiPlugin, EguiPreUpdateSet};
 use console::{block_keyboard_input, block_mouse_input, ConsoleCache};
 use trie_rs::TrieBuilder;
 
+use crate::commandline::{cleanup_commandline, commandline, init_commandline, update_terminal, CommandlineState};
 use crate::commands::clear::{clear_command, ClearCommand};
 use crate::commands::exit::{exit_command, ExitCommand};
 use crate::commands::help::{help_command, HelpCommand};
@@ -25,6 +26,7 @@ mod commands;
 mod console;
 mod log;
 mod macros;
+mod commandline;
 /// Console plugin.
 pub struct ConsolePlugin;
 
@@ -109,5 +111,56 @@ impl Plugin for ConsolePlugin {
                 enable_multipass_for_primary_context: true,
             });
         }
+    }
+}
+
+
+///commandline Plugin is used when you want to have console inside terminal
+pub struct CommandlinePlugin;
+
+impl Plugin for CommandlinePlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<ConsoleConfiguration>()
+            .init_resource::<ConsoleState>()
+            .init_resource::<ConsoleOpen>()
+            .init_resource::<ConsoleCache>()
+            .init_resource::<CommandlineState>()
+            .add_event::<ConsoleCommandEntered>()
+            .add_event::<PrintConsoleLine>()
+            .add_console_command::<ClearCommand, _>(clear_command)
+            .add_console_command::<ExitCommand, _>(exit_command)
+            .add_console_command::<HelpCommand, _>(help_command)
+            // after per-command startup
+            .add_systems(Startup, init.after(ConsoleSet::Startup))
+            .add_systems(Startup, init_commandline.after(ConsoleSet::Startup))
+            .add_systems(Last, cleanup_commandline)
+            
+            //TODO change thease to commandline ones
+            /*
+            .add_systems(
+                PreUpdate,
+                (block_mouse_input, block_keyboard_input)
+                    .after(EguiPreUpdateSet::ProcessInput)
+                    .before(EguiPreUpdateSet::BeginPass),
+            )
+            */
+            .add_systems(
+                Update,
+                (
+                    update_terminal.in_set(ConsoleSet::ConsoleUI),
+                    commandline.in_set(ConsoleSet::ConsoleUI),
+                    receive_console_line.in_set(ConsoleSet::PostCommands),
+                ),
+            )
+            .configure_sets(
+                EguiContextPass,
+                (
+                    ConsoleSet::Commands
+                        .after(ConsoleSet::ConsoleUI)
+                        .run_if(have_commands),
+                    ConsoleSet::PostCommands.after(ConsoleSet::Commands),
+                ),
+            );
+
     }
 }
