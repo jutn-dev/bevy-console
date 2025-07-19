@@ -95,7 +95,7 @@ pub(crate) fn commandline(
                 commandline_state.cursor_position -= 1;
             }
             if key.code == crossterm::event::KeyCode::Right {
-                if commandline_state.cursor_position >= console_state.buf.len() {
+                if commandline_state.cursor_position >= console_state.buf.chars().count() {
                     continue;
                 }
                 commandline_state.cursor_position += 1;
