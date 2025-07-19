@@ -60,30 +60,30 @@ pub(crate) fn commandline(
     while crossterm::event::poll(Duration::from_secs(0)).unwrap() {
         let events = crossterm::event::read().unwrap();
         if let crossterm::event::Event::Key(key) = events {
-            if let crossterm::event::KeyCode::Char(c) = key.code {
-                //finds the correct position to insert the char
-                let mut index = 0;
-                if commandline_state.cursor_position != 0 {
-                    //get char and its staring index
-                    index = match console_state
-                        .buf
-                        .char_indices()
-                        .nth(commandline_state.cursor_position - 1)
-                    {
-                        None => 0,
-                        //add last char's len to get the correct position
-                        Some(char) => char.0 + char.1.len_utf8(),
-                    };
+            match key.code {
+                crossterm::event::KeyCode::Char(c) => {
+                    //finds the correct position to insert the char
+                    let mut index = 0;
+                    if commandline_state.cursor_position != 0 {
+                        //get char and its staring index
+                        index = match console_state
+                            .buf
+                            .char_indices()
+                            .nth(commandline_state.cursor_position - 1)
+                        {
+                            None => 0,
+                            //add last char's len to get the correct position
+                            Some(char) => char.0 + char.1.len_utf8(),
+                        };
+                    }
+                    console_state.buf.insert(index, c);
+                    commandline_state.cursor_position += 1;
                 }
-                console_state.buf.insert(index, c);
-                commandline_state.cursor_position += 1;
-            }
-
-            if key.code == crossterm::event::KeyCode::Backspace {
-                if commandline_state.cursor_position < 1 {
-                    continue;
-                }
-                let index = match console_state
+                crossterm::event::KeyCode::Backspace => {
+                    if commandline_state.cursor_position < 1 {
+                        continue;
+                    }
+                    let index = match console_state
                         .buf
                         .char_indices()
                         .nth(commandline_state.cursor_position - 1)
@@ -92,30 +92,62 @@ pub(crate) fn commandline(
                         //add last char's len to get the correct position
                         Some(char) => char.0,
                     };
-                console_state
-                    .buf
-                    .remove(index);
-                commandline_state.cursor_position -= 1;
-            }
-            if key.code == crossterm::event::KeyCode::Left {
-                if commandline_state.cursor_position == 0 {
-                    continue;
+                    console_state.buf.remove(index);
+                    commandline_state.cursor_position -= 1;
                 }
-                commandline_state.cursor_position -= 1;
-            }
-            if key.code == crossterm::event::KeyCode::Right {
-                if commandline_state.cursor_position >= console_state.buf.chars().count() {
-                    continue;
+                crossterm::event::KeyCode::Left => {
+                    if commandline_state.cursor_position == 0 {
+                        continue;
+                    }
+                    commandline_state.cursor_position -= 1;
                 }
-                commandline_state.cursor_position += 1;
-            }
-            if key.code == crossterm::event::KeyCode::Enter {
-                commandline_state.cursor_position = 0;
-                handle_enter(&mut console_state, &config, &mut command_entered);
-            }
-            if key.code == crossterm::event::KeyCode::Esc {
-                exit_event.write(AppExit::Success);
-                return;
+                crossterm::event::KeyCode::Right => {
+                    if commandline_state.cursor_position >= console_state.buf.chars().count() {
+                        continue;
+                    }
+                    commandline_state.cursor_position += 1;
+                }
+                crossterm::event::KeyCode::Enter => {
+                    commandline_state.cursor_position = 0;
+                    handle_enter(&mut console_state, &config, &mut command_entered);
+                }
+                crossterm::event::KeyCode::Esc => {
+                    exit_event.write(AppExit::Success);
+                    return;
+                }
+                crossterm::event::KeyCode::Up => {
+                    if console_state.history.len() > 1
+                        && console_state.history_index < console_state.history.len() - 1
+                    {
+                        if console_state.history_index == 0 //&& !console_state.buf.trim().is_empty()
+                        {
+                            //save buf to history
+                            *console_state.history.get_mut(0).unwrap() = console_state.buf.clone();
+                        }
+
+                        console_state.history_index += 1;
+                        let previous_item = console_state
+                            .history
+                            .get(console_state.history_index)
+                            .unwrap()
+                            .clone();
+                        console_state.buf = previous_item.to_string();
+                        commandline_state.cursor_position = console_state.buf.chars().count();
+                    }
+                }
+                crossterm::event::KeyCode::Down => {
+                    if console_state.history_index > 0 {
+                        console_state.history_index -= 1;
+                        let next_item = console_state
+                            .history
+                            .get(console_state.history_index)
+                            .unwrap()
+                            .clone();
+                        console_state.buf = next_item.to_string();
+                        commandline_state.cursor_position = console_state.buf.chars().count();
+                    }
+                }
+                _ => (),
             }
         }
     }
