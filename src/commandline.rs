@@ -83,9 +83,18 @@ pub(crate) fn commandline(
                 if commandline_state.cursor_position < 1 {
                     continue;
                 }
+                let index = match console_state
+                        .buf
+                        .char_indices()
+                        .nth(commandline_state.cursor_position - 1)
+                    {
+                        None => console_state.buf.len(),
+                        //add last char's len to get the correct position
+                        Some(char) => char.0,
+                    };
                 console_state
                     .buf
-                    .remove(commandline_state.cursor_position - 1);
+                    .remove(index);
                 commandline_state.cursor_position -= 1;
             }
             if key.code == crossterm::event::KeyCode::Left {
