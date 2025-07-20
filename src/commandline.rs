@@ -1,15 +1,17 @@
 use bevy::prelude::*;
-use crossterm::cursor::{DisableBlinking, MoveToColumn, RestorePosition, SavePosition};
+use crossterm::cursor::{DisableBlinking, MoveToColumn, MoveUp, RestorePosition, SavePosition};
 use crossterm::event::{KeyModifiers, ModifierKeyCode};
-use crossterm::style::Print;
+use crossterm::style::{Print, ResetColor, SetColors};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, Clear, ClearType, DisableLineWrap, EnableLineWrap,
+    ScrollDown, ScrollUp,
 };
 use crossterm::{cursor, execute};
 use shlex::Shlex;
 use std::io::stdin;
 use std::time::Duration;
 
+use crate::console::{recompute_predictions, ConsoleCache};
 use crate::{ConsoleCommandEntered, ConsoleConfiguration, ConsoleState};
 
 #[derive(Resource, Debug, Clone)]
@@ -17,6 +19,7 @@ pub(crate) struct CommandlineState {
     pub(crate) scrollbacks_printed: usize,
     ///cursor_position is the amout of inexes in the string not the amout of chars
     pub(crate) cursor_position: usize,
+    pub(crate) suggestions_shown: bool,
 
     //TODO
     //config options move some where else
@@ -31,6 +34,7 @@ impl Default for CommandlineState {
         CommandlineState {
             scrollbacks_printed: 0,
             cursor_position: 0,
+            suggestions_shown: false,
             exit_key: vec![
                 crossterm::event::KeyCode::Modifier(ModifierKeyCode::LeftControl),
                 crossterm::event::KeyCode::Char('c'),
@@ -56,10 +60,14 @@ pub(crate) fn commandline(
     mut exit_event: EventWriter<AppExit>,
     mut command_entered: EventWriter<'_, ConsoleCommandEntered>,
     config: Res<ConsoleConfiguration>,
+    mut cache: ResMut<ConsoleCache>,
 ) {
     while crossterm::event::poll(Duration::from_secs(0)).unwrap() {
         let events = crossterm::event::read().unwrap();
         if let crossterm::event::Event::Key(key) = events {
+            //clear suggestions on event
+            execute!(std::io::stdout(), Clear(ClearType::FromCursorDown)).unwrap();
+
             match key.code {
                 crossterm::event::KeyCode::Char(c) => {
                     //finds the correct position to insert the char
@@ -109,7 +117,13 @@ pub(crate) fn commandline(
                 }
                 crossterm::event::KeyCode::Enter => {
                     commandline_state.cursor_position = 0;
-                    handle_enter(&mut console_state, &config, &mut command_entered);
+                    handle_enter(
+                        &mut console_state,
+                        &mut commandline_state,
+                        &config,
+                        &mut command_entered,
+                        &cache,
+                    );
                 }
                 crossterm::event::KeyCode::Esc => {
                     exit_event.write(AppExit::Success);
@@ -119,7 +133,8 @@ pub(crate) fn commandline(
                     if console_state.history.len() > 1
                         && console_state.history_index < console_state.history.len() - 1
                     {
-                        if console_state.history_index == 0 //&& !console_state.buf.trim().is_empty()
+                        if console_state.history_index == 0
+                        && !console_state.buf.trim().is_empty()
                         {
                             //save buf to history
                             *console_state.history.get_mut(0).unwrap() = console_state.buf.clone();
@@ -147,6 +162,45 @@ pub(crate) fn commandline(
                         commandline_state.cursor_position = console_state.buf.chars().count();
                     }
                 }
+                crossterm::event::KeyCode::Tab => {
+                    let mut stdout = std::io::stdout();
+                    recompute_predictions(&mut console_state, &mut cache, config.num_suggestions);
+
+                    if !cache.prediction_matches_buffer
+                        && !console_state.buf.is_empty()
+                        && !cache.predictions_cache.is_empty()
+                    {
+                        match &mut console_state.suggestion_index {
+                            Some(index) => {
+                                *index = (*index + 1) % cache.predictions_cache.len();
+                            }
+                            None => {
+                                console_state.suggestion_index = Some(0);
+                            }
+                        }
+                        //print suggestions
+                        for (i, suggestion) in cache.predictions_cache.iter().enumerate() {
+                            let is_highlighted = Some(i) == console_state.suggestion_index;
+
+                            execute!(stdout, Print("\r\n")).unwrap();
+                            if is_highlighted {
+                                execute!(
+                                    stdout,
+                                    SetColors(crossterm::style::Colors::new(
+                                        crossterm::style::Color::Black,
+                                        crossterm::style::Color::White
+                                    ))
+                                )
+                                .unwrap();
+                            }
+                            execute!(stdout, Print(suggestion)).unwrap();
+                            execute!(stdout, ResetColor).unwrap();
+                        }
+                        execute!(stdout, MoveUp(cache.predictions_cache.len() as u16)).unwrap();
+                    }
+
+                    commandline_state.suggestions_shown = true;
+                }
                 _ => (),
             }
         }
@@ -168,6 +222,9 @@ pub(crate) fn update_terminal(
         .skip(commandline_state.scrollbacks_printed)
     {
         commandline_state.scrollbacks_printed += 1;
+        if line.trim().is_empty() {
+            continue;
+        }
         execute!(stdout, Clear(ClearType::CurrentLine)).unwrap();
         execute!(stdout, Print(format!("{}\r\n", line.replace('\n', "\r\n")))).unwrap();
     }
@@ -195,24 +252,37 @@ fn redraw_commandline(
 }
 
 fn handle_enter(
-    state: &mut ConsoleState,
+    console_state: &mut ConsoleState,
+    commandline_state: &mut CommandlineState,
     config: &ConsoleConfiguration,
     command_entered: &mut EventWriter<'_, ConsoleCommandEntered>,
+    cache: &ConsoleCache,
 ) {
-    execute!(std::io::stdout(), Print("\r\n",)).unwrap();
+    //this code is almost the same as the egui console's
 
-    //this code is almost the same as the console's
-    if state.buf.trim().is_empty() {
-        state.scrollback.push(String::new());
-    } else {
-        let cmd_string = state.buf.clone();
-        state.history.insert(1, cmd_string);
-        if state.history.len() > config.history_size + 1 {
-            state.history.pop_back();
+    // if we have a selected suggestion
+    // replace the content of the buffer with it and set the cursor to the end
+    if let Some(index) = console_state.suggestion_index {
+        if index < cache.predictions_cache.len() && !cache.prediction_matches_buffer {
+            console_state.buf = cache.predictions_cache[index].clone();
+            console_state.suggestion_index = None;
+            commandline_state.cursor_position = console_state.buf.chars().count();
+            return;
         }
-        state.history_index = 0;
+    }
 
-        let mut args = Shlex::new(&state.buf).collect::<Vec<_>>();
+    execute!(std::io::stdout(), Print("\r\n",)).unwrap();
+    if console_state.buf.trim().is_empty() {
+        console_state.scrollback.push(String::new());
+    } else {
+        let cmd_string = console_state.buf.clone();
+        console_state.history.insert(1, cmd_string);
+        if console_state.history.len() > config.history_size + 1 {
+            console_state.history.pop_back();
+        }
+        console_state.history_index = 0;
+
+        let mut args = Shlex::new(&console_state.buf).collect::<Vec<_>>();
 
         if !args.is_empty() {
             let command_name = args.remove(0);
@@ -228,10 +298,12 @@ fn handle_enter(
                     config.commands.keys().collect::<Vec<_>>()
                 );
 
-                state.scrollback.push("error: Invalid command".into());
+                console_state
+                    .scrollback
+                    .push("error: Invalid command".into());
             }
         }
 
-        state.buf.clear();
+        console_state.buf.clear();
     }
 }
