@@ -1,14 +1,10 @@
 use bevy::prelude::*;
-use crossterm::cursor::{DisableBlinking, MoveToColumn, MoveUp, RestorePosition, SavePosition};
-use crossterm::event::{KeyModifiers, ModifierKeyCode};
+use crossterm::cursor::{DisableBlinking, MoveToColumn, MoveUp};
+use crossterm::event::ModifierKeyCode;
+use crossterm::execute;
 use crossterm::style::{Print, ResetColor, SetColors};
-use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, Clear, ClearType, DisableLineWrap, EnableLineWrap,
-    ScrollDown, ScrollUp,
-};
-use crossterm::{cursor, execute};
+use crossterm::terminal::{disable_raw_mode, enable_raw_mode, Clear, ClearType};
 use shlex::Shlex;
-use std::io::stdin;
 use std::time::Duration;
 
 use crate::console::{recompute_predictions, ConsoleCache};
@@ -19,14 +15,13 @@ pub(crate) struct CommandlineState {
     pub(crate) scrollbacks_printed: usize,
     ///cursor_position is the amout of inexes in the string not the amout of chars
     pub(crate) cursor_position: usize,
-    pub(crate) suggestions_shown: bool,
 
     //TODO
-    //config options move some where else
+    //config options: move some where else
 
     //Why use crossterm `KeyCode` instead of bevy's?
     //All the terminal input is hadeled by crossterm so it's simpler to use crossterm's `KeyCode`s.
-    pub exit_key: Vec<crossterm::event::KeyCode>,
+    pub exit_key: (crossterm::event::KeyCode, Option<ModifierKeyCode>),
 }
 
 impl Default for CommandlineState {
@@ -34,11 +29,10 @@ impl Default for CommandlineState {
         CommandlineState {
             scrollbacks_printed: 0,
             cursor_position: 0,
-            suggestions_shown: false,
-            exit_key: vec![
-                crossterm::event::KeyCode::Modifier(ModifierKeyCode::LeftControl),
-                crossterm::event::KeyCode::Char('c'),
-            ],
+            exit_key: (
+                crossterm::event::KeyCode::Esc,
+                None,
+            )
         }
     }
 }
@@ -125,7 +119,7 @@ pub(crate) fn commandline(
                         &cache,
                     );
                 }
-                crossterm::event::KeyCode::Esc => {
+                exit_key if exit_key == commandline_state.exit_key.0 => {
                     exit_event.write(AppExit::Success);
                     return;
                 }
@@ -133,8 +127,7 @@ pub(crate) fn commandline(
                     if console_state.history.len() > 1
                         && console_state.history_index < console_state.history.len() - 1
                     {
-                        if console_state.history_index == 0
-                        && !console_state.buf.trim().is_empty()
+                        if console_state.history_index == 0 && !console_state.buf.trim().is_empty()
                         {
                             //save buf to history
                             *console_state.history.get_mut(0).unwrap() = console_state.buf.clone();
@@ -163,43 +156,7 @@ pub(crate) fn commandline(
                     }
                 }
                 crossterm::event::KeyCode::Tab => {
-                    let mut stdout = std::io::stdout();
-                    recompute_predictions(&mut console_state, &mut cache, config.num_suggestions);
-
-                    if !cache.prediction_matches_buffer
-                        && !console_state.buf.is_empty()
-                        && !cache.predictions_cache.is_empty()
-                    {
-                        match &mut console_state.suggestion_index {
-                            Some(index) => {
-                                *index = (*index + 1) % cache.predictions_cache.len();
-                            }
-                            None => {
-                                console_state.suggestion_index = Some(0);
-                            }
-                        }
-                        //print suggestions
-                        for (i, suggestion) in cache.predictions_cache.iter().enumerate() {
-                            let is_highlighted = Some(i) == console_state.suggestion_index;
-
-                            execute!(stdout, Print("\r\n")).unwrap();
-                            if is_highlighted {
-                                execute!(
-                                    stdout,
-                                    SetColors(crossterm::style::Colors::new(
-                                        crossterm::style::Color::Black,
-                                        crossterm::style::Color::White
-                                    ))
-                                )
-                                .unwrap();
-                            }
-                            execute!(stdout, Print(suggestion)).unwrap();
-                            execute!(stdout, ResetColor).unwrap();
-                        }
-                        execute!(stdout, MoveUp(cache.predictions_cache.len() as u16)).unwrap();
-                    }
-
-                    commandline_state.suggestions_shown = true;
+                    handle_tab(&mut console_state, &config, &mut cache);
                 }
                 _ => (),
             }
@@ -226,7 +183,11 @@ pub(crate) fn update_terminal(
             continue;
         }
         execute!(stdout, Clear(ClearType::CurrentLine)).unwrap();
-        execute!(stdout, Print(format!("{}\r\n", line.replace('\n', "\r\n")))).unwrap();
+        execute!(
+            stdout,
+            Print(format!("\r{}\r\n", line.replace('\n', "\r\n")))
+        )
+        .unwrap();
     }
 }
 
@@ -249,6 +210,48 @@ fn redraw_commandline(
         MoveToColumn((config.symbol.chars().count() + commandline_state.cursor_position) as u16)
     )
     .unwrap();
+}
+
+fn handle_tab(
+    console_state: &mut ConsoleState,
+    config: &ConsoleConfiguration,
+    cache: &mut ConsoleCache,
+) {
+    let mut stdout = std::io::stdout();
+    recompute_predictions(console_state, cache, config.num_suggestions);
+
+    if !cache.prediction_matches_buffer
+        && !console_state.buf.is_empty()
+        && !cache.predictions_cache.is_empty()
+    {
+        match &mut console_state.suggestion_index {
+            Some(index) => {
+                *index = (*index + 1) % cache.predictions_cache.len();
+            }
+            None => {
+                console_state.suggestion_index = Some(0);
+            }
+        }
+        //print suggestions
+        for (i, suggestion) in cache.predictions_cache.iter().enumerate() {
+            let is_highlighted = Some(i) == console_state.suggestion_index;
+
+            execute!(stdout, Print("\r\n")).unwrap();
+            if is_highlighted {
+                execute!(
+                    stdout,
+                    SetColors(crossterm::style::Colors::new(
+                        crossterm::style::Color::Black,
+                        crossterm::style::Color::White
+                    ))
+                )
+                .unwrap();
+            }
+            execute!(stdout, Print(suggestion)).unwrap();
+            execute!(stdout, ResetColor).unwrap();
+        }
+        execute!(stdout, MoveUp(cache.predictions_cache.len() as u16)).unwrap();
+    }
 }
 
 fn handle_enter(
