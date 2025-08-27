@@ -1,13 +1,21 @@
 #![doc = include_str ! ("../README.md")]
 #![deny(missing_docs)]
 
+#[cfg(all(not(feature = "egui"), not(feature = "commandline")))]
+compile_error!("No features selected, Please select egui or/and commandline");
+
+
 use bevy::prelude::*;
 pub use bevy_console_derive::ConsoleCommand;
+#[cfg(feature = "egui")]
 use bevy_egui::{EguiContextPass, EguiPlugin, EguiPreUpdateSet};
-use console::{block_keyboard_input, block_mouse_input, ConsoleCache};
+#[cfg(feature = "egui")]
+use console::{block_keyboard_input, block_mouse_input};
+use console::ConsoleCache;
 use trie_rs::TrieBuilder;
 
-use crate::commandline::{cleanup_commandline, commandline, init_commandline, update_terminal, CommandlineState};
+#[cfg(feature = "commandline")]
+use crate::commandline::{cleanup_commandline, commandline_input, init_commandline, update_terminal};
 use crate::commands::clear::{clear_command, ClearCommand};
 use crate::commands::exit::{exit_command, ExitCommand};
 use crate::commands::help::{help_command, HelpCommand};
@@ -17,15 +25,19 @@ pub use crate::console::{
 };
 pub use crate::log::*;
 
-use crate::console::{console_ui, receive_console_line, ConsoleState};
+#[cfg(feature = "egui")]
+use crate::console::console_ui;
+use crate::console::{receive_console_line, ConsoleState};
 pub use clap;
 
 // mod color;
+#[cfg(feature = "egui")] 
 mod color;
 mod commands;
 mod console;
 mod log;
 mod macros;
+#[cfg(feature = "commandline")]
 mod commandline;
 /// Console plugin.
 pub struct ConsolePlugin;
@@ -68,6 +80,7 @@ fn init(config: Res<ConsoleConfiguration>, mut cache: ResMut<ConsoleCache>) {
     cache.commands_trie = Some(trie_builder.build());
 }
 
+#[cfg(feature = "egui")]
 impl Plugin for ConsolePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ConsoleConfiguration>()
@@ -116,15 +129,16 @@ impl Plugin for ConsolePlugin {
 
 
 ///commandline Plugin is used when you want to have console inside terminal
+#[cfg(feature = "commandline")]
 pub struct CommandlinePlugin;
 
+#[cfg(feature = "commandline")]
 impl Plugin for CommandlinePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ConsoleConfiguration>()
             .init_resource::<ConsoleState>()
             .init_resource::<ConsoleOpen>()
             .init_resource::<ConsoleCache>()
-            .init_resource::<CommandlineState>()
             .add_event::<ConsoleCommandEntered>()
             .add_event::<PrintConsoleLine>()
             .add_console_command::<ClearCommand, _>(clear_command)
@@ -148,12 +162,12 @@ impl Plugin for CommandlinePlugin {
                 Update,
                 (
                     update_terminal.in_set(ConsoleSet::ConsoleUI),
-                    commandline.in_set(ConsoleSet::ConsoleUI),
+                    commandline_input.in_set(ConsoleSet::ConsoleUI),
                     receive_console_line.in_set(ConsoleSet::PostCommands),
                 ),
             )
             .configure_sets(
-                EguiContextPass,
+                Update,
                 (
                     ConsoleSet::Commands
                         .after(ConsoleSet::ConsoleUI)

@@ -5,15 +5,25 @@ use bevy::ecs::{
     world::unsafe_world_cell::UnsafeWorldCell,
 };
 use bevy::platform::hash::FixedState;
-use bevy::{input::keyboard::KeyboardInput, prelude::*};
+use bevy::prelude::*;
+
+#[cfg(feature = "egui")]
+use bevy::input::keyboard::KeyboardInput;
+
+#[cfg(feature = "egui")]
 use bevy_egui::egui::{self, Align, ScrollArea, TextEdit};
+#[cfg(feature = "egui")]
 use bevy_egui::egui::{text::LayoutJob, text_selection::CCursorRange};
+#[cfg(feature = "egui")]
 use bevy_egui::egui::{Context, Id};
+#[cfg(feature = "egui")]
 use bevy_egui::{
     egui::{epaint::text::cursor::CCursor, Color32, FontId, TextFormat},
     EguiContexts,
 };
 use clap::{CommandFactory, FromArgMatches};
+#[cfg(feature = "commandline")]
+use crossterm::event::ModifierKeyCode;
 use core::str;
 use shlex::Shlex;
 use std::collections::{BTreeMap, VecDeque};
@@ -22,10 +32,9 @@ use std::marker::PhantomData;
 use std::mem;
 use trie_rs::Trie;
 
-use crate::{
-    color::{parse_ansi_styled_str, TextFormattingOverride},
-    ConsoleSet,
-};
+#[cfg(feature = "egui")]
+use crate::{color::{parse_ansi_styled_str, TextFormattingOverride},};
+use crate::ConsoleSet;
 
 type ConsoleCommandEnteredReaderSystemParam = EventReader<'static, 'static, ConsoleCommandEntered>;
 
@@ -215,14 +224,19 @@ impl PrintConsoleLine {
 #[derive(Resource)]
 pub struct ConsoleConfiguration {
     /// Registered keys for toggling the console
+    #[cfg(feature = "egui")]
     pub keys: Vec<KeyCode>,
     /// Left position
+    #[cfg(feature = "egui")]
     pub left_pos: f32,
     /// Top position
+    #[cfg(feature = "egui")]
     pub top_pos: f32,
     /// Console height
+    #[cfg(feature = "egui")]
     pub height: f32,
     /// Console width
+    #[cfg(feature = "egui")]
     pub width: f32,
     /// Registered console commands
     pub commands: BTreeMap<&'static str, clap::Command>,
@@ -231,28 +245,43 @@ pub struct ConsoleConfiguration {
     /// Line prefix symbol
     pub symbol: String,
     /// allows window to be collpased
+    #[cfg(feature = "egui")]
     pub collapsible: bool,
     /// Title name of console window
+    #[cfg(feature = "egui")]
     pub title_name: String,
     /// allows window to be resizable
+    #[cfg(feature = "egui")]
     pub resizable: bool,
     /// allows window to be movable
+    #[cfg(feature = "egui")]
     pub moveable: bool,
     /// show the title bar or not
+    #[cfg(feature = "egui")]
     pub show_title_bar: bool,
     /// Background color of console window  
+    #[cfg(feature = "egui")]
     pub background_color: Color32,
     /// Foreground (text) color
+    #[cfg(feature = "egui")]
     pub foreground_color: Color32,
     /// Number of suggested commands to show
     pub num_suggestions: usize,
     /// Blocks mouse from clicking through console
+    #[cfg(feature = "egui")]
     pub block_mouse: bool,
     /// Blocks keyboard from interacting outside console when active
+    #[cfg(feature = "egui")]
     pub block_keyboard: bool,
     /// Custom completion sequences,
     /// for example [vec!["custom", "foo"]], will complete `custom foo` when typing `custom`
     pub arg_completions: Vec<Vec<String>>,
+
+    //only used with terminal commandline
+    ///Terminal/commandline exit key.
+    ///using this key quits the bevy app.
+   #[cfg(feature = "commandline")] 
+    pub exit_key: (crossterm::event::KeyCode, Option<ModifierKeyCode>),
 }
 
 #[derive(Resource, Default)]
@@ -268,25 +297,45 @@ pub struct ConsoleCache {
 impl Default for ConsoleConfiguration {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "egui")]
             keys: vec![KeyCode::Backquote],
+            #[cfg(feature = "egui")]
             left_pos: 200.0,
+            #[cfg(feature = "egui")]
             top_pos: 100.0,
+            #[cfg(feature = "egui")]
             height: 400.0,
+            #[cfg(feature = "egui")]
             width: 800.0,
             commands: BTreeMap::new(),
             history_size: 20,
             symbol: "$ ".to_owned(),
+            #[cfg(feature = "egui")]
             collapsible: false,
+            #[cfg(feature = "egui")]
             title_name: "Console".to_string(),
+            #[cfg(feature = "egui")]
             resizable: true,
+            #[cfg(feature = "egui")]
             moveable: true,
+            #[cfg(feature = "egui")]
             show_title_bar: true,
+            #[cfg(feature = "egui")]
             background_color: Color32::from_black_alpha(102),
+            #[cfg(feature = "egui")]
             foreground_color: Color32::LIGHT_GRAY,
             num_suggestions: 4,
+            #[cfg(feature = "egui")]
             block_mouse: false,
+            #[cfg(feature = "egui")]
             block_keyboard: false,
             arg_completions: Default::default(),
+            
+            #[cfg(feature = "commandline")] 
+            exit_key: (
+                crossterm::event::KeyCode::Esc,
+                None,
+            )
         }
     }
 }
@@ -294,25 +343,42 @@ impl Default for ConsoleConfiguration {
 impl Clone for ConsoleConfiguration {
     fn clone(&self) -> ConsoleConfiguration {
         ConsoleConfiguration {
+            #[cfg(feature = "egui")]
             keys: self.keys.clone(),
+            #[cfg(feature = "egui")]
             left_pos: self.left_pos,
+            #[cfg(feature = "egui")]
             top_pos: self.top_pos,
+            #[cfg(feature = "egui")]
             height: self.height,
+            #[cfg(feature = "egui")]
             width: self.width,
             commands: self.commands.clone(),
             history_size: self.history_size,
             symbol: self.symbol.clone(),
             arg_completions: self.arg_completions.clone(),
+            #[cfg(feature = "egui")]
             collapsible: false,
+            #[cfg(feature = "egui")]
             title_name: "Console".to_string(),
+            #[cfg(feature = "egui")]
             resizable: true,
+            #[cfg(feature = "egui")]
             moveable: true,
+            #[cfg(feature = "egui")]
             show_title_bar: true,
+            #[cfg(feature = "egui")]
             background_color: Color32::from_black_alpha(102),
+            #[cfg(feature = "egui")]
             foreground_color: Color32::LIGHT_GRAY,
             num_suggestions: 4,
+            #[cfg(feature = "egui")]
             block_mouse: self.block_mouse,
+            #[cfg(feature = "egui")]
             block_keyboard: self.block_keyboard,
+            
+            #[cfg(feature = "commandline")] 
+            exit_key: self.exit_key, 
         }
     }
 }
@@ -382,6 +448,14 @@ pub(crate) struct ConsoleState {
     pub(crate) history: VecDeque<String>,
     pub(crate) history_index: usize,
     pub(crate) suggestion_index: Option<usize>,
+    
+    //only used with terminal commandline
+    #[cfg(feature = "commandline")]
+    pub(crate) scrollbacks_printed: usize,
+    ///The position of the cursor in terminal
+    ///The position is one per character
+    #[cfg(feature = "commandline")]
+    pub(crate) cursor_position: usize,
 }
 
 impl Default for ConsoleState {
@@ -392,14 +466,20 @@ impl Default for ConsoleState {
             history: VecDeque::from([String::new()]),
             history_index: 0,
             suggestion_index: None,
+            #[cfg(feature = "commandline")]
+            scrollbacks_printed: 0,
+            #[cfg(feature = "commandline")]
+            cursor_position: 0,
         }
     }
 }
 
+#[cfg(feature = "egui")]
 fn default_style(config: &ConsoleConfiguration) -> TextFormat {
     TextFormat::simple(FontId::monospace(14f32), config.foreground_color)
 }
 
+#[cfg(feature = "egui")]
 fn style_ansi_text(str: &str, config: &ConsoleConfiguration) -> LayoutJob {
     let mut layout_job = LayoutJob::default();
     for (str, overrides) in parse_ansi_styled_str(str).into_iter() {
@@ -484,6 +564,7 @@ pub(crate) fn recompute_predictions(
     }
 }
 
+#[cfg(feature = "egui")]
 pub(crate) fn console_ui(
     mut egui_context: EguiContexts,
     config: Res<ConsoleConfiguration>,
@@ -665,6 +746,7 @@ pub(crate) fn console_ui(
     }
 }
 
+#[cfg(feature = "egui")]
 fn handle_enter(
     config: Res<'_, ConsoleConfiguration>,
     cache: &ResMut<'_, ConsoleCache>,
@@ -733,6 +815,7 @@ pub(crate) fn receive_console_line(
     }
 }
 
+#[cfg(feature = "egui")]
 fn console_key_pressed(keyboard_input: &KeyboardInput, configured_keys: &[KeyCode]) -> bool {
     if !keyboard_input.state.is_pressed() {
         return false;
@@ -747,6 +830,7 @@ fn console_key_pressed(keyboard_input: &KeyboardInput, configured_keys: &[KeyCod
     false
 }
 
+#[cfg(feature = "egui")]
 fn set_cursor_pos(ctx: &Context, id: Id, pos: usize) {
     if let Some(mut state) = TextEdit::load_state(ctx, id) {
         state
@@ -756,6 +840,7 @@ fn set_cursor_pos(ctx: &Context, id: Id, pos: usize) {
     }
 }
 
+#[cfg(feature = "egui")]
 pub fn block_mouse_input(
     mut mouse: ResMut<ButtonInput<MouseButton>>,
     config: Res<ConsoleConfiguration>,
@@ -774,6 +859,7 @@ pub fn block_mouse_input(
     }
 }
 
+#[cfg(feature = "egui")]
 pub fn block_keyboard_input(
     mut keyboard_keycode: ResMut<ButtonInput<KeyCode>>,
     config: Res<ConsoleConfiguration>,
@@ -799,6 +885,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "egui")]
     #[test]
     fn test_console_key_pressed_scan_code() {
         let input = KeyboardInput {
@@ -816,6 +903,7 @@ mod tests {
         assert!(result);
     }
 
+    #[cfg(feature = "egui")]
     #[test]
     fn test_console_wrong_key_pressed_scan_code() {
         let input = KeyboardInput {
@@ -833,6 +921,7 @@ mod tests {
         assert!(!result);
     }
 
+    #[cfg(feature = "egui")]
     #[test]
     fn test_console_key_pressed_key_code() {
         let input = KeyboardInput {
@@ -850,6 +939,7 @@ mod tests {
         assert!(result);
     }
 
+    #[cfg(feature = "egui")]
     #[test]
     fn test_console_wrong_key_pressed_key_code() {
         let input = KeyboardInput {
@@ -867,6 +957,7 @@ mod tests {
         assert!(!result);
     }
 
+    #[cfg(feature = "egui")]
     #[test]
     fn test_console_key_right_key_but_not_pressed() {
         let input = KeyboardInput {
