@@ -1,7 +1,7 @@
 use bevy::ecs::query::FilteredAccessSet;
 use bevy::ecs::resource::Resource;
 use bevy::ecs::{
-    component::Tick,
+    change_detection::Tick,
     system::{ScheduleSystem, SystemMeta, SystemParam},
     world::unsafe_world_cell::UnsafeWorldCell,
 };
@@ -156,46 +156,48 @@ unsafe impl<T: Command> SystemParam for ConsoleCommand<'_, T> {
         world: UnsafeWorldCell<'w>,
         change_tick: Tick,
     ) -> Self::Item<'w, 's> {
-        let mut message_reader = ConsoleCommandEnteredReaderSystemParam::get_param(
-            &mut state.message_reader,
-            system_meta,
-            world,
-            change_tick,
-        );
-        let mut console_line = PrintConsoleLineWriterSystemParam::get_param(
-            &mut state.console_line,
-            system_meta,
-            world,
-            change_tick,
-        );
+        unsafe {
+            let mut message_reader = ConsoleCommandEnteredReaderSystemParam::get_param(
+                &mut state.message_reader,
+                system_meta,
+                world,
+                change_tick,
+            );
+            let mut console_line = PrintConsoleLineWriterSystemParam::get_param(
+                &mut state.console_line,
+                system_meta,
+                world,
+                change_tick,
+            );
 
-        let command = message_reader.read().find_map(|command| {
-            if T::name() == command.command_name {
-                let clap_command = T::command().no_binary_name(true);
-                // .color(clap::ColorChoice::Always);
-                let arg_matches = clap_command.try_get_matches_from(command.args.iter());
+            let command = message_reader.read().find_map(|command| {
+                if T::name() == command.command_name {
+                    let clap_command = T::command().no_binary_name(true);
+                    // .color(clap::ColorChoice::Always);
+                    let arg_matches = clap_command.try_get_matches_from(command.args.iter());
 
-                debug!(
-                    "Trying to parse as `{}`. Result: {arg_matches:?}",
-                    command.command_name
-                );
+                    debug!(
+                        "Trying to parse as `{}`. Result: {arg_matches:?}",
+                        command.command_name
+                    );
 
-                match arg_matches {
-                    Ok(matches) => {
-                        return Some(T::from_arg_matches(&matches));
-                    }
-                    Err(err) => {
-                        console_line.write(PrintConsoleLine::new(err.to_string()));
-                        return Some(Err(err));
+                    match arg_matches {
+                        Ok(matches) => {
+                            return Some(T::from_arg_matches(&matches));
+                        }
+                        Err(err) => {
+                            console_line.write(PrintConsoleLine::new(err.to_string()));
+                            return Some(Err(err));
+                        }
                     }
                 }
-            }
-            None
-        });
+                None
+            });
 
-        ConsoleCommand {
-            command,
-            console_line,
+            ConsoleCommand {
+                command,
+                console_line,
+            }
         }
     }
 }
