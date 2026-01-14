@@ -8,11 +8,11 @@ use bevy::ecs::{
 use bevy::platform::hash::FixedState;
 use bevy::{input::keyboard::KeyboardInput, prelude::*};
 use bevy_egui::egui::{self, Align, ScrollArea, TextEdit};
-use bevy_egui::egui::{text::LayoutJob, text_selection::CCursorRange};
 use bevy_egui::egui::{Context, Id};
+use bevy_egui::egui::{text::LayoutJob, text_selection::CCursorRange};
 use bevy_egui::{
-    egui::{epaint::text::cursor::CCursor, Color32, FontId, TextFormat},
     EguiContexts,
+    egui::{Color32, FontId, TextFormat, epaint::text::cursor::CCursor},
 };
 use clap::{CommandFactory, FromArgMatches};
 use core::str;
@@ -24,8 +24,8 @@ use std::mem;
 use trie_rs::Trie;
 
 use crate::{
-    color::{parse_ansi_styled_str, TextFormattingOverride},
     ConsoleSet,
+    color::{TextFormattingOverride, parse_ansi_styled_str},
 };
 
 type ConsoleCommandEnteredReaderSystemParam =
@@ -811,8 +811,8 @@ pub fn block_keyboard_input(
 
 #[cfg(test)]
 mod tests {
-    use bevy::input::keyboard::{Key, NativeKey, NativeKeyCode};
     use bevy::input::ButtonState;
+    use bevy::input::keyboard::{Key, NativeKey, NativeKeyCode};
 
     use super::*;
 

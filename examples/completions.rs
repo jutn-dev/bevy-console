@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_console::{reply, AddConsoleCommand, ConsoleCommand, ConsoleConfiguration, ConsolePlugin};
+use bevy_console::{AddConsoleCommand, ConsoleCommand, ConsoleConfiguration, ConsolePlugin, reply};
 use clap::{Parser, ValueEnum};
 
 fn main() {

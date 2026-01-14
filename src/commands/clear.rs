@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
 use crate as bevy_console;
-use crate::console::ConsoleState;
 use crate::ConsoleCommand;
+use crate::console::ConsoleState;
 use clap::Parser;
 
 /// Clears the console

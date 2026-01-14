@@ -299,9 +299,14 @@ mod test {
                 (" ", HashSet::from([])),
                 (
                     "ERROR",
-                    HashSet::from([TextFormattingOverride::Foreground(Color32::from_rgb(222, 56, 43))])
+                    HashSet::from([TextFormattingOverride::Foreground(Color32::from_rgb(
+                        222, 56, 43
+                    ))])
                 ),
-                (" error: Could not find function: Displaying ScriptValue without world access: String(", HashSet::from([])),
+                (
+                    " error: Could not find function: Displaying ScriptValue without world access: String(",
+                    HashSet::from([])
+                ),
             ]
         );
     }

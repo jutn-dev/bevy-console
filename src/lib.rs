@@ -4,19 +4,19 @@
 use bevy::prelude::*;
 pub use bevy_console_derive::ConsoleCommand;
 use bevy_egui::{EguiPlugin, EguiPreUpdateSet, EguiPrimaryContextPass};
-use console::{block_keyboard_input, block_mouse_input, ConsoleCache};
+use console::{ConsoleCache, block_keyboard_input, block_mouse_input};
 use trie_rs::TrieBuilder;
 
-use crate::commands::clear::{clear_command, ClearCommand};
-use crate::commands::exit::{exit_command, ExitCommand};
-use crate::commands::help::{help_command, HelpCommand};
+use crate::commands::clear::{ClearCommand, clear_command};
+use crate::commands::exit::{ExitCommand, exit_command};
+use crate::commands::help::{HelpCommand, help_command};
 pub use crate::console::{
     AddConsoleCommand, Command, ConsoleCommand, ConsoleCommandEntered, ConsoleConfiguration,
     ConsoleOpen, NamedCommand, PrintConsoleLine,
 };
 pub use crate::log::*;
 
-use crate::console::{console_ui, receive_console_line, ConsoleState};
+use crate::console::{ConsoleState, console_ui, receive_console_line};
 pub use clap;
 
 mod color;

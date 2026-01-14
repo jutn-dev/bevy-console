@@ -1,6 +1,6 @@
 use bevy::log::LogPlugin;
 use bevy::{log, prelude::*};
-use bevy_console::{make_layer, ConsolePlugin};
+use bevy_console::{ConsolePlugin, make_layer};
 
 fn main() {
     App::new()
